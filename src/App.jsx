@@ -1,7 +1,9 @@
-import React, { useState, Suspense } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { Environment, OrbitControls, Stars } from '@react-three/drei';
+import React, { useState, Suspense, useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Environment, OrbitControls, Stars, MeshReflectorMaterial, Float } from '@react-three/drei';
+import { EffectComposer, Bloom, SSAO } from '@react-three/postprocessing';
 import { MechaModel } from './MechaModel';
+import * as THREE from 'three';
 
 const PLANETS = [
   {
@@ -124,13 +126,73 @@ const PLANETS = [
     starCount: 600,
     desc: 'Saturn\'s Moon — Dense Green Atmospheric Haze',
   },
+  {
+    name: 'Cyberpunk',
+    icon: '🏙️',
+    bg: '#050212',
+    ambient: 0.1,
+    keyLight: '#110033',
+    keyIntensity: 0.5,
+    fillLight: '#ff007f',
+    fillIntensity: 3.0,
+    rimLight: '#00e5ff',
+    rimIntensity: 4.0,
+    env: 'night',
+    starCount: 200,
+    desc: 'Neo-Tokyo — Neon Reflections & Wet Asphalt',
+    isCyberpunk: true,
+  },
 ];
+
+function CyberpunkFloor() {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
+      <planeGeometry args={[50, 50]} />
+      <MeshReflectorMaterial
+        blur={[400, 100]}
+        resolution={1024}
+        mixBlur={1}
+        mixStrength={80}
+        roughness={0.15}
+        depthScale={1.2}
+        minDepthThreshold={0.4}
+        maxDepthThreshold={1.4}
+        color="#0a0a0a"
+        metalness={0.8}
+      />
+    </mesh>
+  );
+}
+
+function NeonSigns() {
+  return (
+    <group position={[0, 0, 0]}>
+      {/* Pink Neon Ring */}
+      <Float speed={2} rotationIntensity={0.5} floatIntensity={1} position={[-4, 2, -3]}>
+        <mesh>
+          <torusGeometry args={[1, 0.05, 16, 64]} />
+          <meshBasicMaterial color="#ff007f" toneMapped={false} />
+        </mesh>
+        <pointLight color="#ff007f" intensity={2} distance={10} />
+      </Float>
+      {/* Cyan Neon Bar */}
+      <Float speed={3} rotationIntensity={1} floatIntensity={2} position={[4, 3, -2]}>
+        <mesh>
+          <cylinderGeometry args={[0.05, 0.05, 3, 16]} />
+          <meshBasicMaterial color="#00e5ff" toneMapped={false} />
+        </mesh>
+        <pointLight color="#00e5ff" intensity={2} distance={10} />
+      </Float>
+    </group>
+  );
+}
 
 function App() {
   const [planetIdx, setPlanetIdx] = useState(0);
   const [autoRotate, setAutoRotate] = useState(true);
   const [wireframe, setWireframe] = useState(false);
   const [hologram, setHologram] = useState(false);
+  const [rayTraced, setRayTraced] = useState(true); // RTX ON by default for showcase
 
   const p = PLANETS[planetIdx];
 
@@ -158,7 +220,32 @@ function App() {
           <Suspense fallback={null}>
             <MechaModel wireframe={wireframe} hologram={hologram} />
             <Environment preset={p.env} background={false} />
-            <Stars radius={50} depth={40} count={p.starCount} factor={4} fade speed={0.5} />
+            
+            {p.name !== 'Cyberpunk' && (
+              <Stars radius={50} depth={40} count={p.starCount} factor={4} fade speed={0.5} />
+            )}
+
+            {p.isCyberpunk && (
+              <>
+                <CyberpunkFloor />
+                <NeonSigns />
+              </>
+            )}
+
+            {/* Post-processing Bloom for glowing effects, plus optional SSR/SSAO for Ray Traced look */}
+            <EffectComposer disableNormalPass>
+              {rayTraced && (
+                <SSAO 
+                  blendFunction={0} 
+                  samples={31} 
+                  radius={5} 
+                  intensity={20} 
+                  luminanceInfluence={0.6} 
+                  color="#000000" 
+                />
+              )}
+              <Bloom luminanceThreshold={1} mipmapBlur intensity={1.5} />
+            </EffectComposer>
 
             <OrbitControls
               enablePan={false}
@@ -166,7 +253,7 @@ function App() {
               minDistance={4}
               maxDistance={16}
               minPolarAngle={0}
-              maxPolarAngle={Math.PI / 1.8}
+              maxPolarAngle={Math.PI / (p.isCyberpunk ? 2.1 : 1.8)} // Restrict angle so we don't look under the floor in cyberpunk mode
               autoRotate={autoRotate}
               autoRotateSpeed={hologram ? 2.0 : 1.0}
               enableDamping={true}
@@ -241,6 +328,14 @@ function App() {
                 >
                   <span className="mode-icon">▦</span>
                   X-Ray
+                </button>
+                <button
+                  className={`mode-btn ${rayTraced ? 'active' : ''}`}
+                  onClick={() => setRayTraced(!rayTraced)}
+                  style={{ color: rayTraced ? '#66ff66' : '', borderColor: rayTraced ? '#66ff66' : '' }}
+                >
+                  <span className="mode-icon">⚡</span>
+                  RTX {rayTraced ? 'ON' : 'OFF'}
                 </button>
               </div>
             </div>
